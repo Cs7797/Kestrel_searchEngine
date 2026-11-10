@@ -23,12 +23,16 @@ public class SearchController {
 
     public SearchController(
             KestrelService kestrelService,
-           @Value("${kestrel.writes-enabled:true}") boolean writesEnabled) {
+            @Value("${kestrel.writes-enabled:true}") boolean writesEnabled) {
 
         this.kestrelService = kestrelService;
         this.writesEnabled = writesEnabled;
     }
 
+    @GetMapping("/")
+public String home() {
+    return "Kestrel Search Engine API is running";
+}
     // Prevent unauthorized modifications in read-only deployments
     private void requireWritesEnabled() {
 
