@@ -14,11 +14,11 @@
 
 Kestrel is a custom-built information retrieval system designed to explore the internal workings of modern search engines.
 
-Rather than relying on existing search frameworks or libraries such as Apache Lucene, Kestrel implements its core search functionality independently. It uses an inverted index to organize documents, positional information to support phrase queries, and BM25-based scoring to rank search results by relevance.
+Rather than relying on existing search frameworks or libraries such as Apache Lucene, Kestrel implements its core indexing and ranking functionality independently. It uses an inverted index to organize documents, positional information to support phrase queries, and BM25-based scoring to rank search results by relevance.
 
 The backend is built with Java and Spring Boot, while PostgreSQL provides persistent document storage. The search index is reconstructed from persisted documents whenever the application starts.
 
-The project is being extended into a full-stack search platform, with a React-based interface, concurrent indexing and retrieval, performance optimization, containerization, and deployment planned as part of its development roadmap.
+The next engineering priorities are thread-safe indexing and search, Docker containerization, and reproducible deployment. These features are planned, not yet implemented.
 
 ## Key Features
 
@@ -82,7 +82,7 @@ flowchart TD
 | ------------------ | -------------------------------------------------------------- |
 | Document           | Represents the core document model                             |
 | InvertedIndex      | Maintains term-to-document mappings and positional information |
-| Tokenizer          | Extracts normalized terms from document content                |
+| TextNormalizer     | Tokenizes text, applies stopword policy, and stems terms      |
 | BM25 Scoring       | Calculates document relevance scores                           |
 | KestrelService     | Coordinates search, ingestion, and document operations         |
 | SearchController   | Exposes REST API endpoints                                     |
@@ -99,7 +99,7 @@ A client submits a document through the REST API. The service persists the docum
 
 **2. Search Processing**
 
-A search query is tokenized. The inverted index retrieves relevant document postings, and BM25 scoring calculates their relevance.
+A search query is normalized (tokenized, stemmed, and filtered for stopwords). The inverted index retrieves relevant document postings, and BM25 scoring calculates their relevance.
 
 **3. Ranked Retrieval**
 
@@ -150,6 +150,7 @@ The backend currently exposes the following endpoints.
 | PUT    | `/api/documents/{id}`          | Update an existing document    |
 | DELETE | `/api/documents/{id}`          | Delete a document              |
 | GET    | `/api/search/ranked?q={query}` | Retrieve ranked search results |
+| GET    | `/api/documents`               | List persisted documents       |
 
 ### 1. Add a Document
 
@@ -183,19 +184,21 @@ Request:
 }
 ```
 
-Expected response: `204 No Content`
+Expected response: `200 OK` with the updated document response
 
 ### 3. Delete a Document
 
 **DELETE** `/api/documents/doc-001`
 
-Expected response: `204 No Content`
+Expected response: `200 OK` with the delete response
 
 ### 4. Ranked Search
 
 **GET** `/api/search/ranked?q=Python`
 
 Returns a list of document identifiers ordered by relevance.
+
+**GET** `/api/documents` lists persisted documents.
 
 ---
 
@@ -213,7 +216,7 @@ Ensure the following are installed:
 ### 1. Clone the Repository
 
 ```bash
-git clone YOUR_GITHUB_REPOSITORY_URL
+git clone <YOUR_REPOSITORY_URL>
 cd Kestrel
 ```
 
@@ -232,10 +235,10 @@ DB_PASSWORD=YOUR_DATABASE_PASSWORD
 ### 3. Run the Application
 
 ```bash
-mvn clean install
+mvn -DskipTests package
 ```
 
-Start the Spring Boot application:
+This builds the application without running the integration suite. Start Spring Boot with:
 
 ```bash
 mvn spring-boot:run
@@ -251,11 +254,19 @@ Flyway automatically applies pending database migrations during startup. Hiberna
 
 ### 4. Run Tests
 
-Execute the test suite:
+Run regular tests without the PostgreSQL integration test:
 
 ```bash
-mvn clean test
+mvn "-Dtest=*,!KestrelIntegrationTest" test
 ```
+
+Integration tests use a dedicated local PostgreSQL database (not your Supabase database). Set up `kestrel_test` and a restricted `kestrel_test` user, then create `src/test/resources/application-test.properties` if it is not already present in your checkout. Use test-only credentials (`KESTREL_TEST_DB_PASSWORD`), a local datasource URL, and `@ActiveProfiles("test")` on the integration test class. Verify the effective datasource and Flyway URLs point to `127.0.0.1` **before** running the integration tests:
+
+```powershell
+mvn "-Dtest=KestrelIntegrationTest" test
+```
+
+Never run integration tests against a shared or production database. The test setup is local to your working copy and may not yet be included in the public repository.
 
 ---
 
@@ -282,25 +293,47 @@ src/main/resources/db/migration/
 
 ---
 
-## Performance and Benchmarking
+## Retrieval Quality — BEIR Benchmarks
 
-Kestrel includes an initial benchmark for evaluating indexing and ranked-search performance.
+Kestrel was evaluated with an **unchanged production ranking configuration** across four independently indexed datasets from [BEIR](https://github.com/beir-cellar/beir). Each run used the official `test` relevance judgments and the corpus/query files for that dataset. The BM25 implementation uses separate title and body fields, with `k1 = 1.5`, `b = 0.75`, and a title weight of `2.0`.
 
-The preliminary benchmark used a dataset of 10,000 documents and measured indexing time and ranked-search latency.
+| Dataset | Documents | Evaluated queries | Precision@10 | Recall@10 | NDCG@10 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| SciDocs | 25,657 | 1,000 | 0.0829 | 0.1681 | **0.1614** |
+| SciFact | 5,183 | 300 | 0.0843 | 0.7637 | **0.6291** |
+| NFCorpus | 3,633 | 323 | 0.2279 | 0.1538 | **0.3186** |
+| FiQA-2018 | 57,638 | 648 | 0.0699 | 0.3143 | **0.2528** |
 
-| Metric                       | Preliminary Result |
-| ---------------------------- | -----------------: |
-| Documents indexed            |             10,000 |
-| Indexing time                |           64.33 ms |
-| Median ranked-search latency |            0.50 ms |
+**Evaluation notes:** The four corpora contain **92,111 documents in total**, indexed separately—not in a single 92K-document index. The test splits contain **2,271 evaluated queries** in total. NDCG uses **linear relevance gains** with logarithmic rank discount, matching the standard `trec_eval` convention. Precision and recall count judgments greater than zero as relevant. Dataset scores should be compared with baselines **on the same dataset**, not against one another as measures of absolute search quality. Published BM25 scores are useful context, but exact comparisons require matching indexing, preprocessing, and evaluator settings.
 
-**Benchmark context:** These are preliminary local measurements, not production performance guarantees. Results depend on hardware, dataset characteristics, JVM behavior, and benchmark methodology. Further benchmarking and optimization are planned.
+The BEIR data files are not part of this repository. Place the downloaded datasets under `datasets/<dataset-name>/` with `corpus.jsonl`, `queries.jsonl`, and `qrels/test.tsv`, then run the corresponding dataset-evaluation tests if available in your checkout.
+
+## In-Memory Performance Benchmark
+
+A separate local performance run measured the **production BM25** implementation over a 25K-document SciDocs corpus prefix.
+
+| Measurement | 25K-document result |
+| --- | ---: |
+| Median indexing throughput | 3,874 documents/second |
+| Median search latency | 14.239 ms |
+| P95 search latency | 36.235 ms |
+| P99 search latency | 47.699 ms |
+| Single-thread search throughput | 64 queries/second |
+| Estimated incremental retained heap | 343.44 MiB |
+
+A full 25,657-document corpus build took **6.140 seconds** in the recorded run. These are **in-memory, single-thread measurements**. They exclude HTTP, service, and database latency. Heap is an estimate of retained Java heap, not process memory usage (RSS). Timing results are machine-, JVM-, workload-, and methodology-dependent, and are not production SLAs. The benchmark is opt-in and can be run with:
+
+```powershell
+mvn "-Dtest=PerformanceBenchmarkTest" "-Dkestrel.performanceBenchmark=true" test
+```
+
+This command requires the benchmark dataset locally and may generate reports in the project root. Keep raw benchmark outputs and local-only reports out of Git.
 
 ---
 
 ## Development Roadmap
 
-Kestrel is actively evolving from a custom search engine into a full-stack search platform.
+Kestrel is evolving from a custom search engine into a more reliable, concurrent, containerized backend service.
 
 ### Completed
 
@@ -317,13 +350,10 @@ Kestrel is actively evolving from a custom search engine into a full-stack searc
 - [x] Flyway database migrations
 - [x] Document creation, updating, and deletion
 - [x] Automatic index reconstruction on startup
+- [x] Local PostgreSQL integration tests (in the current development environment)
 
 ### In Progress
 
-- [ ] Comprehensive integration testing
-- [ ] React-based search interface
-- [ ] Document management dashboard
-- [ ] Search analytics and performance visualization
 - [ ] Concurrent indexing and retrieval
 - [ ] Thread-safety improvements
 - [ ] Performance optimization
@@ -366,7 +396,7 @@ Introduce concurrency, containerization, and deployment as the architecture evol
 
 ## Project Status
 
-Kestrel's core search engine and backend persistence layer are implemented. The project is currently being extended with a full-stack interface, improved testing, concurrency, performance optimization, and deployment infrastructure.
+Kestrel's core search engine, backend persistence layer, and multi-dataset retrieval evaluation are implemented. Concurrency, containerization, and deployment are future work.
 
 **The goal is to build a search platform while maintaining control over its core indexing and retrieval algorithms.**
 
@@ -378,7 +408,7 @@ Kestrel's core search engine and backend persistence layer are implemented. The 
 
 Information Technology Graduate | Software Engineering | Java | Backend Development | Search Systems
 
-[GitHub](www.github.com/Cs7797) · [LinkedIn](https://www.linkedin.com/in/chetan-seth-b3b266302/)
+[GitHub](https://github.com/Cs7797) · [LinkedIn](https://www.linkedin.com/in/chetan-seth-b3b266302/)
 
 ---
 

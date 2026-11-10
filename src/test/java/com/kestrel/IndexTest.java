@@ -293,7 +293,7 @@ void punctuationOnlyContentShouldNotCreateSearchableTerms() {
         new Document("D1", "Symbols", "!!! ... @#$", null)
     );
 
-    assertEquals(List.of(), index.search("symbols"));
+   assertEquals(List.of("D1"), index.search("symbols"));
     assertEquals(List.of(), index.search("java"));
 }
 
@@ -374,7 +374,7 @@ void termFrequencyShouldCountRepeatedOccurrences() {
         new Document("D1", "Java Guide", "java java python java", null)
     );
 
-    assertEquals(3, index.getTermFrequency("java", "D1"));
+   assertEquals(4, index.getTermFrequency("java", "D1"));
     assertEquals(1, index.getTermFrequency("python", "D1"));
     assertEquals(0, index.getTermFrequency("missing", "D1"));
 }
@@ -401,7 +401,7 @@ void removingNonexistentDocumentShouldNotAffectIndex() {
 
     assertEquals(List.of("D1"), index.search("java"));
     assertEquals(List.of("D1"), index.search("spring"));
-    assertEquals(1, index.getTermFrequency("java", "D1"));
+    assertEquals(2, index.getTermFrequency("java", "D1"));
 }
 @Test
 void searchShouldMatchSingleTermsOnly() {
@@ -419,8 +419,115 @@ void addingNullDocumentShouldThrowException() {
     InvertedIndex index = new InvertedIndex();
 
     assertThrows(
-        NullPointerException.class,
-        () -> index.addDocument(null)
+            NullPointerException.class,
+            () -> index.addDocument(null));
+}
+@Test
+void shouldMatchSingularQueryWithPluralDocumentTerm() {
+    InvertedIndex index = new InvertedIndex();
+
+    Document document = new Document(
+            "D1",
+            "Networks",
+            "Networks are essential for communication",
+            null
+    );
+
+    index.addDocument(document);
+
+    assertTrue(index.searchRanked("network").contains("D1"));
+}
+
+@Test
+void shouldMatchPluralQueryWithSingularDocumentTerm() {
+    InvertedIndex index = new InvertedIndex();
+
+    Document document = new Document(
+            "D2",
+            "Network",
+            "A network connects multiple devices",
+            null);
+
+    index.addDocument(document);
+
+    assertTrue(index.searchRanked("networks").contains("D2"));
+}
+
+@Test
+void phraseSearchShouldPreserveStopwords() {
+    InvertedIndex index = new InvertedIndex();
+
+    index.addDocument(new Document(
+            "D1", "Guide", "state of the art search", null));
+
+    assertEquals(
+            List.of("D1"),
+            index.searchPhrase("state of the art")
     );
 }
+
+@Test
+void phraseSearchShouldSupportStemming() {
+    InvertedIndex index = new InvertedIndex();
+
+    index.addDocument(new Document(
+            "D1", "Guide", "networks are growing", null));
+
+    assertEquals(
+            List.of("D1"),
+            index.searchPhrase("network are growing")
+    );
+}
+
+@Test
+void termFrequencyShouldSupportStemming() {
+    InvertedIndex index = new InvertedIndex();
+
+    index.addDocument(new Document(
+            "D1", "Guide", "network networks network", null));
+
+    assertEquals(3, index.getTermFrequency("networks", "D1"));
+}
+
+@Test
+void deletingStemmedDocumentShouldRemoveAllPostings() {
+    InvertedIndex index = new InvertedIndex();
+
+    index.addDocument(new Document(
+            "D1", "Guide", "temporary networks", null));
+
+    index.removeDocument("D1");
+
+    assertTrue(index.search("temporary").isEmpty());
+    assertTrue(index.search("network").isEmpty());
+}
+
+@Test
+void updatingStemmedDocumentShouldRemoveOldPostings() {
+    InvertedIndex index = new InvertedIndex();
+
+    index.addDocument(new Document(
+            "D1", "Guide", "temporary networks", null));
+
+    index.addDocument(new Document(
+            "D1", "Guide", "database systems", null));
+
+    assertTrue(index.search("temporary").isEmpty());
+    assertTrue(index.search("networks").isEmpty());
+    assertEquals(List.of("D1"), index.search("database"));
+}
+
+@Test
+void rankedSearchShouldIgnoreStopwordsAndDuplicateTerms() {
+    InvertedIndex index = new InvertedIndex();
+
+    index.addDocument(new Document(
+            "D1", "Guide", "java programming", null));
+
+    assertEquals(
+            index.searchRanked("java java"),
+            index.searchRanked("the java and java")
+    );
+}
+
 }

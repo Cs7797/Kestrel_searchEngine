@@ -1,3 +1,7 @@
+# Local datasets
+/datasets/
+/data/
+
 # Environment variables
 .env
 .env.*

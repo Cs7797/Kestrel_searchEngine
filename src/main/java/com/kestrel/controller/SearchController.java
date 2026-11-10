@@ -2,6 +2,9 @@ package com.kestrel.controller;
 
 import com.kestrel.service.KestrelService;
 import com.kestrel.dto.DocumentRequest;
+import com.kestrel.dto.DocumentResponse;
+import com.kestrel.entity.DocumentEntity;
+
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -35,24 +38,33 @@ public class SearchController {
     
     @PostMapping("/api/documents")
     @ResponseStatus(HttpStatus.CREATED)
-    public void addDocument(@Valid @RequestBody DocumentRequest request) {
-        kestrelService.addDocument(request);
+    public ResponseEntity<DocumentResponse> addDocument(@Valid @RequestBody DocumentRequest request) {
+       DocumentResponse response = kestrelService.addDocument(request);
+
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
-    @PutMapping("/api/documents/{id}")
-public ResponseEntity<Void> updateDocument(
+@PutMapping("/api/documents/{id}")
+public ResponseEntity<DocumentResponse> updateDocument(
         @PathVariable String id,
         @Valid @RequestBody DocumentRequest request) {
 
-    kestrelService.updateDocument(id, request);
-    return ResponseEntity.noContent().build();
+    DocumentResponse response = kestrelService.updateDocument(id, request);
+
+    return ResponseEntity.ok(response);
 }
 
 @DeleteMapping("/api/documents/{id}")
-public ResponseEntity<Void> deleteDocument(@PathVariable String id) {
+public ResponseEntity<DocumentResponse> deleteDocument(
+        @PathVariable String id) {
 
-    kestrelService.deleteDocument(id);
-    return ResponseEntity.noContent().build();
+    DocumentResponse response = kestrelService.deleteDocument(id);
+
+    return ResponseEntity.ok(response);
+}
+@GetMapping("/api/documents")
+public List<DocumentEntity> getAllDocuments() {
+    return kestrelService.getAllDocuments();
 }
 
 }
