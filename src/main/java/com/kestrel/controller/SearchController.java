@@ -1,3 +1,4 @@
+
 package com.kestrel.controller;
 
 import com.kestrel.service.KestrelService;
@@ -5,76 +6,105 @@ import com.kestrel.dto.DocumentRequest;
 import com.kestrel.dto.DocumentResponse;
 import com.kestrel.entity.DocumentEntity;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.DeleteMapping;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.PutMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.ResponseStatus;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 import jakarta.validation.Valid;
 import java.util.List;
 
-@RestController 
+@RestController
 public class SearchController {
 
     private final KestrelService kestrelService;
+    private final boolean writesEnabled;
 
-    public SearchController(KestrelService kestrelService) {
+    public SearchController(
+            KestrelService kestrelService,
+           @Value("${kestrel.writes-enabled:true}") boolean writesEnabled) {
+
         this.kestrelService = kestrelService;
+        this.writesEnabled = writesEnabled;
     }
 
-    @GetMapping ("/api/search/ranked")
+    // Prevent unauthorized modifications in read-only deployments
+    private void requireWritesEnabled() {
+
+        if (!writesEnabled) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "Document modifications are disabled"
+            );
+        }
+    }
+
+    // SEARCH DOCUMENTS
+    @GetMapping("/api/search/ranked")
     public List<String> searchRanked(
             @RequestParam("q") String query) {
+
         return kestrelService.search(query);
     }
 
-    
+    // CREATE DOCUMENT
     @PostMapping("/api/documents")
-    @ResponseStatus(HttpStatus.CREATED)
-    public ResponseEntity<DocumentResponse> addDocument(@Valid @RequestBody DocumentRequest request) {
-       DocumentResponse response = kestrelService.addDocument(request);
+    public ResponseEntity<DocumentResponse> addDocument(
+            @Valid @RequestBody DocumentRequest request) {
 
-        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+        requireWritesEnabled();
+
+        DocumentResponse response =
+                kestrelService.addDocument(request);
+
+        return ResponseEntity
+                .status(HttpStatus.CREATED)
+                .body(response);
     }
 
-@PutMapping("/api/documents/{id}")
-public ResponseEntity<DocumentResponse> updateDocument(
-        @PathVariable String id,
-        @Valid @RequestBody DocumentRequest request) {
+    // UPDATE DOCUMENT
+    @PutMapping("/api/documents/{id}")
+    public ResponseEntity<DocumentResponse> updateDocument(
+            @PathVariable String id,
+            @Valid @RequestBody DocumentRequest request) {
 
-    DocumentResponse response = kestrelService.updateDocument(id, request);
+        requireWritesEnabled();
 
-    return ResponseEntity.ok(response);
-}
+        DocumentResponse response =
+                kestrelService.updateDocument(id, request);
 
-@GetMapping("/api/documents/{id}")
-public ResponseEntity<DocumentEntity> getDocumentById(
-        @PathVariable String id) {
+        return ResponseEntity.ok(response);
+    }
 
-    DocumentEntity document = kestrelService.getDocumentById(id);
+    // DELETE DOCUMENT
+    @DeleteMapping("/api/documents/{id}")
+    public ResponseEntity<DocumentResponse> deleteDocument(
+            @PathVariable String id) {
 
-    return ResponseEntity.ok(document);
-}
+        requireWritesEnabled();
 
+        DocumentResponse response =
+                kestrelService.deleteDocument(id);
 
-@DeleteMapping("/api/documents/{id}")
-public ResponseEntity<DocumentResponse> deleteDocument(
-        @PathVariable String id) {
+        return ResponseEntity.ok(response);
+    }
 
-    DocumentResponse response = kestrelService.deleteDocument(id);
+    // GET ALL DOCUMENTS
+    @GetMapping("/api/documents")
+    public List<DocumentEntity> getAllDocuments() {
 
-    return ResponseEntity.ok(response);
-}
-@GetMapping("/api/documents")
-public List<DocumentEntity> getAllDocuments() {
-    return kestrelService.getAllDocuments();
-}
+        return kestrelService.getAllDocuments();
+    }
 
+    // GET DOCUMENT BY ID
+    @GetMapping("/api/documents/{id}")
+    public ResponseEntity<DocumentEntity> getDocumentById(
+            @PathVariable String id) {
+
+        DocumentEntity document =
+                kestrelService.getDocumentById(id);
+
+        return ResponseEntity.ok(document);
+    }
 }
