@@ -54,6 +54,16 @@ public ResponseEntity<DocumentResponse> updateDocument(
     return ResponseEntity.ok(response);
 }
 
+@GetMapping("/api/documents/{id}")
+public ResponseEntity<DocumentEntity> getDocumentById(
+        @PathVariable String id) {
+
+    DocumentEntity document = kestrelService.getDocumentById(id);
+
+    return ResponseEntity.ok(document);
+}
+
+
 @DeleteMapping("/api/documents/{id}")
 public ResponseEntity<DocumentResponse> deleteDocument(
         @PathVariable String id) {

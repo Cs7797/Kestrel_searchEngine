@@ -2,6 +2,7 @@
 package com.kestrel;
 
 import java.util.*;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 public class InvertedIndex {
 
@@ -9,7 +10,7 @@ public class InvertedIndex {
     // term -> document ID -> positions
     private final Map<String, Map<String, List<Integer>>> titleIndex;
     private final Map<String, Map<String, List<Integer>>> bodyIndex;
-
+    private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
     private final Map<String, Document> documents;
 
     // Searchable lengths exclude stopwords.
@@ -38,32 +39,33 @@ public class InvertedIndex {
         this.bodyLengths = new HashMap<>();
     }
 
-    // --------------------------------------------------
-    // DOCUMENT INSERTION AND UPDATING
-    // --------------------------------------------------
-
     public void addDocument(Document document) {
-        Objects.requireNonNull(document, "document must not be null");
 
-        // Replace an existing document completely.
-        if (documents.containsKey(document.getId())) {
-            removeDocument(document.getId());
+        lock.writeLock().lock();
+
+        try {
+            Objects.requireNonNull(document, "document must not be null");
+
+            if (documents.containsKey(document.getId())) {
+                removeDocument(document.getId());
+            }
+
+            documents.put(document.getId(), document);
+
+            addField(document.getId(), document.getTitle(), titleIndex);
+            addField(document.getId(), document.getContent(), bodyIndex);
+
+            titleLengths.put(
+                    document.getId(),
+                    TextNormalizer.searchableLength(document.getTitle()));
+
+            bodyLengths.put(
+                    document.getId(),
+                    TextNormalizer.searchableLength(document.getContent()));
+
+        } finally {
+            lock.writeLock().unlock();
         }
-
-        documents.put(document.getId(), document);
-
-        addField(document.getId(), document.getTitle(), titleIndex);
-        addField(document.getId(), document.getContent(), bodyIndex);
-
-        titleLengths.put(
-                document.getId(),
-                TextNormalizer.searchableLength(document.getTitle())
-        );
-
-        bodyLengths.put(
-                document.getId(),
-                TextNormalizer.searchableLength(document.getContent())
-        );
     }
 
     private void addField(
@@ -77,22 +79,15 @@ public class InvertedIndex {
         for (int position = 0; position < terms.size(); position++) {
             String term = terms.get(position);
 
-            Map<String, List<Integer>> postings =
-                    index.computeIfAbsent(term, key -> new HashMap<>());
+            Map<String, List<Integer>> postings = index.computeIfAbsent(term, key -> new HashMap<>());
 
-            List<Integer> positions =
-                    postings.computeIfAbsent(
-                            documentId,
-                            key -> new ArrayList<>()
-                    );
+            List<Integer> positions = postings.computeIfAbsent(
+                    documentId,
+                    key -> new ArrayList<>());
 
             positions.add(position);
         }
     }
-
-    // --------------------------------------------------
-    // DOCUMENT REMOVAL
-    // --------------------------------------------------
 
     private void removeField(
             String documentId,
@@ -118,59 +113,97 @@ public class InvertedIndex {
     }
 
     public void removeDocumentFromIndex(Document document) {
-        Objects.requireNonNull(document, "document must not be null");
-        String documentId = document.getId();
-        Document indexedDocument = documents.remove(documentId);
-        Document documentToRemove = indexedDocument == null ? document : indexedDocument;
 
-        removeField(documentId, documentToRemove.getTitle(), titleIndex);
-        removeField(documentId, documentToRemove.getContent(), bodyIndex);
-        titleLengths.remove(documentId);
-        bodyLengths.remove(documentId);
-    }
+        lock.writeLock().lock();
 
-    public void removeDocument(String documentId) {
-        if (documentId == null || documentId.isBlank()) {
-            return;
+        try {
+            Objects.requireNonNull(document, "document must not be null");
+
+            String documentId = document.getId();
+
+            Document indexedDocument = documents.remove(documentId);
+
+            Document documentToRemove = indexedDocument == null ? document : indexedDocument;
+
+            removeField(
+                    documentId,
+                    documentToRemove.getTitle(),
+                    titleIndex);
+
+            removeField(
+                    documentId,
+                    documentToRemove.getContent(),
+                    bodyIndex);
+
+            titleLengths.remove(documentId);
+            bodyLengths.remove(documentId);
+
+        } finally {
+            lock.writeLock().unlock();
         }
-
-        Document document = documents.get(documentId);
-
-        if (document == null) {
-            return;
-        }
-
-        removeDocumentFromIndex(document);
     }
 
     public void clear() {
-        titleIndex.clear();
-        bodyIndex.clear();
-        documents.clear();
-        titleLengths.clear();
-        bodyLengths.clear();
+        lock.writeLock().lock();
+        try {
+            titleIndex.clear();
+            bodyIndex.clear();
+            documents.clear();
+            titleLengths.clear();
+            bodyLengths.clear();
+        } finally {
+            lock.writeLock().unlock();
+        }
+    }
+
+    public void removeDocument(String documentId) {
+
+        lock.writeLock().lock();
+
+        try {
+            if (documentId == null || documentId.isBlank()) {
+                return;
+            }
+
+            Document document = documents.get(documentId);
+
+            if (document == null) {
+                return;
+            }
+
+            removeDocumentFromIndex(document);
+
+        } finally {
+            lock.writeLock().unlock();
+        }
     }
 
     // --------------------------------------------------
     // BASIC SEARCH
     // Searches both title and body.
     // --------------------------------------------------
-
     public List<String> search(String term) {
-        String normalizedTerm = TextNormalizer.normalizeTerm(term);
+        lock.readLock().lock();
 
-        if (normalizedTerm == null || normalizedTerm.isBlank()) {
-            return List.of();
+        try {
+            String normalizedTerm = TextNormalizer.normalizeTerm(term);
+
+            if (normalizedTerm == null || normalizedTerm.isBlank()) {
+                return List.of();
+            }
+
+            Set<String> results = new HashSet<>();
+
+            addPostingDocuments(titleIndex, normalizedTerm, results);
+            addPostingDocuments(bodyIndex, normalizedTerm, results);
+
+            return results.stream()
+                    .sorted()
+                    .toList();
+
+        } finally {
+            lock.readLock().unlock();
         }
-
-        Set<String> results = new HashSet<>();
-
-        addPostingDocuments(titleIndex, normalizedTerm, results);
-        addPostingDocuments(bodyIndex, normalizedTerm, results);
-
-        return results.stream()
-                .sorted()
-                .toList();
     }
 
     private void addPostingDocuments(
@@ -185,31 +218,27 @@ public class InvertedIndex {
         }
     }
 
-    // --------------------------------------------------
-    // TERM FREQUENCY
-    // Counts occurrences in title AND body.
-    // --------------------------------------------------
-
     public int getTermFrequency(String term, String documentId) {
-        String normalizedTerm = TextNormalizer.normalizeTerm(term);
+        lock.readLock().lock();
 
-        if (normalizedTerm == null || normalizedTerm.isBlank()) {
-            return 0;
+        try {
+            String normalizedTerm = TextNormalizer.normalizeTerm(term);
+
+            if (normalizedTerm == null || normalizedTerm.isBlank()) {
+                return 0;
+            }
+
+            int titleFrequency = getFieldTermFrequency(
+                    titleIndex, normalizedTerm, documentId);
+
+            int bodyFrequency = getFieldTermFrequency(
+                    bodyIndex, normalizedTerm, documentId);
+
+            return titleFrequency + bodyFrequency;
+
+        } finally {
+            lock.readLock().unlock();
         }
-
-        int titleFrequency = getFieldTermFrequency(
-                titleIndex,
-                normalizedTerm,
-                documentId
-        );
-
-        int bodyFrequency = getFieldTermFrequency(
-                bodyIndex,
-                normalizedTerm,
-                documentId
-        );
-
-        return titleFrequency + bodyFrequency;
     }
 
     private int getFieldTermFrequency(
@@ -228,31 +257,32 @@ public class InvertedIndex {
         return positions == null ? 0 : positions.size();
     }
 
-    // --------------------------------------------------
-    // PHRASE SEARCH
-    // A phrase must occur entirely within one field.
-    // --------------------------------------------------
-
     public List<String> searchPhrase(String phrase) {
-        if (phrase == null || phrase.isBlank()) {
-            return List.of();
+        lock.readLock().lock();
+
+        try {
+            if (phrase == null || phrase.isBlank()) {
+                return List.of();
+            }
+
+            List<String> terms = TextNormalizer.normalizeForIndex(phrase);
+
+            if (terms.isEmpty()) {
+                return List.of();
+            }
+
+            Set<String> results = new HashSet<>();
+
+            results.addAll(searchPhraseInField(terms, titleIndex));
+            results.addAll(searchPhraseInField(terms, bodyIndex));
+
+            return results.stream()
+                    .sorted()
+                    .toList();
+
+        } finally {
+            lock.readLock().unlock();
         }
-
-        List<String> terms =
-                TextNormalizer.normalizeForIndex(phrase);
-
-        if (terms.isEmpty()) {
-            return List.of();
-        }
-
-        Set<String> results = new HashSet<>();
-
-        results.addAll(searchPhraseInField(terms, titleIndex));
-        results.addAll(searchPhraseInField(terms, bodyIndex));
-
-        return results.stream()
-                .sorted()
-                .toList();
     }
 
     private Set<String> searchPhraseInField(
@@ -261,15 +291,13 @@ public class InvertedIndex {
 
         Set<String> results = new HashSet<>();
 
-        Map<String, List<Integer>> firstPostings =
-                index.get(terms.get(0));
+        Map<String, List<Integer>> firstPostings = index.get(terms.get(0));
 
         if (firstPostings == null) {
             return results;
         }
 
-        for (Map.Entry<String, List<Integer>> entry
-                : firstPostings.entrySet()) {
+        for (Map.Entry<String, List<Integer>> entry : firstPostings.entrySet()) {
 
             String documentId = entry.getKey();
             List<Integer> firstPositions = entry.getValue();
@@ -278,8 +306,7 @@ public class InvertedIndex {
                 boolean matches = true;
 
                 for (int i = 1; i < terms.size(); i++) {
-                    Map<String, List<Integer>> postings =
-                            index.get(terms.get(i));
+                    Map<String, List<Integer>> postings = index.get(terms.get(i));
 
                     if (postings == null) {
                         matches = false;
@@ -322,6 +349,20 @@ public class InvertedIndex {
 
         return (double) totalLength / lengths.size();
     }
+    public void replaceAllDocuments(List<Document> newDocuments) {
+    Objects.requireNonNull(newDocuments, "documents must not be null");
+
+    lock.writeLock().lock();
+    try {
+        clear();
+
+        for (Document document : newDocuments) {
+            addDocument(document);
+        }
+    } finally {
+        lock.writeLock().unlock();
+    }
+}
 
     private double scoreFieldTerm(
             String term,
@@ -348,8 +389,7 @@ public class InvertedIndex {
 
         double idf = Math.log(
                 1.0 + (documentCount - documentFrequency + 0.5)
-                        / (documentFrequency + 0.5)
-        );
+                        / (documentFrequency + 0.5));
 
         int documentLength = lengths.getOrDefault(documentId, 0);
 
@@ -372,16 +412,14 @@ public class InvertedIndex {
                 documentId,
                 titleIndex,
                 titleLengths,
-                averageTitleLength
-        );
+                averageTitleLength);
 
         double bodyScore = scoreFieldTerm(
                 term,
                 documentId,
                 bodyIndex,
                 bodyLengths,
-                averageBodyLength
-        );
+                averageBodyLength);
 
         return titleBoost * titleScore + bodyScore;
     }
@@ -391,70 +429,74 @@ public class InvertedIndex {
     // --------------------------------------------------
 
     public List<String> searchRanked(String query) {
-        if (query == null || query.isBlank() || documents.isEmpty()) {
-            return List.of();
-        }
+        lock.readLock().lock();
 
-        List<String> terms = TextNormalizer.normalizeQuery(query);
-
-        if (terms.isEmpty()) {
-            return List.of();
-        }
-
-        // A document is a candidate if it matches either field.
-        Set<String> candidates = new HashSet<>();
-
-        for (String term : terms) {
-            if (titleBoost > 0.0) {
-                addPostingDocuments(titleIndex, term, candidates);
-            }
-            addPostingDocuments(bodyIndex, term, candidates);
-        }
-
-        if (candidates.isEmpty()) {
-            return List.of();
-        }
-
-        double averageTitleLength = getAverageLength(titleLengths);
-        double averageBodyLength = getAverageLength(bodyLengths);
-
-        Map<String, Double> scores = new HashMap<>();
-
-        for (String documentId : candidates) {
-            if (!documents.containsKey(documentId)) {
-                continue;
+        try {
+            if (query == null || query.isBlank() || documents.isEmpty()) {
+                return List.of();
             }
 
-            double totalScore = 0.0;
+            List<String> terms = TextNormalizer.normalizeQuery(query);
+
+            if (terms.isEmpty()) {
+                return List.of();
+            }
+
+            // A document is a candidate if it matches either field.
+            Set<String> candidates = new HashSet<>();
 
             for (String term : terms) {
-                totalScore += scoreDocument(
-                        term,
-                        documentId,
-                        averageTitleLength,
-                        averageBodyLength
-                );
+                if (titleBoost > 0.0) {
+                    addPostingDocuments(titleIndex, term, candidates);
+                }
+                addPostingDocuments(bodyIndex, term, candidates);
             }
 
-            if (totalScore > 0.0) {
-                scores.put(documentId, totalScore);
+            if (candidates.isEmpty()) {
+                return List.of();
             }
+
+            double averageTitleLength = getAverageLength(titleLengths);
+            double averageBodyLength = getAverageLength(bodyLengths);
+
+            Map<String, Double> scores = new HashMap<>();
+
+            for (String documentId : candidates) {
+                if (!documents.containsKey(documentId)) {
+                    continue;
+                }
+
+                double totalScore = 0.0;
+
+                for (String term : terms) {
+                    totalScore += scoreDocument(
+                            term,
+                            documentId,
+                            averageTitleLength,
+                            averageBodyLength);
+                }
+
+                if (totalScore > 0.0) {
+                    scores.put(documentId, totalScore);
+                }
+            }
+
+            return scores.entrySet()
+                    .stream()
+                    .sorted((first, second) -> {
+                        int comparison = Double.compare(
+                                second.getValue(),
+                                first.getValue());
+
+                        return comparison != 0
+                                ? comparison
+                                : first.getKey().compareTo(second.getKey());
+                    })
+                    .map(Map.Entry::getKey)
+                    .toList();
+
+        } finally {
+            lock.readLock().unlock();
         }
-
-        return scores.entrySet()
-                .stream()
-                .sorted((first, second) -> {
-                    int comparison = Double.compare(
-                            second.getValue(),
-                            first.getValue()
-                    );
-
-                    return comparison != 0
-                            ? comparison
-                            : first.getKey().compareTo(second.getKey());
-                })
-                .map(Map.Entry::getKey)
-                .toList();
     }
-
 }

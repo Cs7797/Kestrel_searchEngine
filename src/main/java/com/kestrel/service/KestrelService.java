@@ -7,8 +7,6 @@ import com.kestrel.dto.DocumentRequest;
 import com.kestrel.dto.DocumentResponse;
 import com.kestrel.entity.DocumentEntity;
 import com.kestrel.repository.DocumentRepository;
-
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -197,10 +195,7 @@ public class KestrelService {
                 .map(this::toDocument)
                 .toList();
 
-        afterCommit(() -> {
-            invertedIndex.clear();
-            snapshot.forEach(invertedIndex::addDocument);
-        });
+       afterCommit(() -> invertedIndex.replaceAllDocuments(snapshot));
     }
 
     // CONVERT JPA ENTITY TO SEARCH DOMAIN MODEL

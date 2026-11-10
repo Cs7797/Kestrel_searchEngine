@@ -1,0 +1,32 @@
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: kestrel
+      POSTGRES_USER: kestrel
+      POSTGRES_PASSWORD: ${KESTREL_DB_PASSWORD:?Set KESTREL_DB_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kestrel -d kestrel"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  kestrel:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/kestrel
+      SPRING_DATASOURCE_USERNAME: kestrel
+      SPRING_DATASOURCE_PASSWORD: ${KESTREL_DB_PASSWORD:?Set KESTREL_DB_PASSWORD}
+      SPRING_FLYWAY_URL: jdbc:postgresql://postgres:5432/kestrel
+      SPRING_FLYWAY_USER: kestrel
+      SPRING_FLYWAY_PASSWORD: ${KESTREL_DB_PASSWORD:?Set KESTREL_DB_PASSWORD}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
