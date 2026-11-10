@@ -1,3 +1,4 @@
+
 name: Kestrel CI
 
 on:
@@ -6,23 +7,47 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
 jobs:
-  build:
+  build-and-test:
     runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: kestrel_test
+          POSTGRES_USER: kestrel_test
+          POSTGRES_PASSWORD: ci_test_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U kestrel_test -d kestrel_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      KESTREL_TEST_DB_PASSWORD: ci_test_password
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Set up Java 21
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: '21'
           cache: maven
 
-      - name: Compile and run unit tests
-        run: mvn -B -Dtest=InvertedIndexConcurrencyTest test
+      - name: Run unit tests
+        run: mvn -B "-Dtest=DocumentTest,InvertedIndexConcurrencyTest" test
 
-      - name: Package application
+      - name: Run PostgreSQL integration tests
+        run: mvn -B "-Dtest=KestrelIntegrationTest" test
+
+      - name: Package Kestrel
         run: mvn -B -DskipTests package
