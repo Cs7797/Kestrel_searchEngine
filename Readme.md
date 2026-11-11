@@ -10,7 +10,7 @@ A custom Java search engine with field-aware BM25 ranking, positional inverted i
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-17-4169E1)](compose.yaml)
 [![CI](https://github.com/Cs7797/Kestrel_searchEngine/actions/workflows/ci.yml/badge.svg)](https://github.com/Cs7797/Kestrel_searchEngine/actions)
 
-**[Try the read-only demo](https://kestrel-search-engine.vercel.app/)** ·  · [Source code](https://github.com/Cs7797/Kestrel_searchEngine) · [Frontend setup](client/README.md)
+**[Try the read-only demo](https://kestrel-search-engine.vercel.app/)** · [Source code](https://github.com/Cs7797/Kestrel_searchEngine) · [Frontend setup](client/README.md)
 
 ## Live demo
 
