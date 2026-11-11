@@ -9,11 +9,17 @@ Use Node.js 22.12+ (Node 22 LTS recommended) and npm.
 ```powershell
 cd D:\Kestrel\client
 npm ci
-Copy-Item .env.example .env.local
 npm run dev
 ```
 
-Open http://127.0.0.1:5173. `.env.local` is ignored by Git. For local development, `PORT=http://localhost:8080` (or `PORT=8080`) selects the backend reached by the read-only Vite proxy. This is the backend target, not the Vite listening port. Start Spring Boot separately on that port. If PORT is absent, the proxy uses VITE_KESTREL_API_URL, then defaults to localhost:8080.
+Before running Vite, create `client/.env.local` (ignored by Git):
+
+```dotenv
+PORT=http://localhost:8080
+VITE_KESTREL_API_URL=https://kestrel-search.onrender.com
+```
+
+Open http://127.0.0.1:5173. For local development, `PORT=http://localhost:8080` (or `PORT=8080`) selects the backend reached by the read-only Vite proxy. This is the backend target, not the Vite listening port. Start Spring Boot separately on that port. If PORT is absent, the proxy uses VITE_KESTREL_API_URL, then defaults to localhost:8080.
 
 For production builds, `VITE_KESTREL_API_URL=https://kestrel-search.onrender.com` remains the public API origin; PORT does not replace it in the built frontend. Configure the exact deployed frontend origin in Render's backend CORS settings when hosting. Restart Vite after changing environment values. Never put database credentials in frontend configuration.
 
@@ -25,22 +31,24 @@ npm run preview
 
 Tests supply a public example API origin and replace fetch; no live service is contacted by unit tests. The production build emits `client/dist`. Maven remains independent of this folder.
 
-## Backend integration and current deployment discrepancy
+## Live demo and backend integration
+
+The read-only frontend is deployed at [kestrel-search-engine.vercel.app](https://kestrel-search-engine.vercel.app/), using a curated 70-document demonstration corpus separate from the local benchmark datasets.
 
 The inspected working tree exposes `GET /api/search/results?q=...` returning an array of `{id, title, snippet, url, rank}`. The existing service returns up to 20 results and truncates content previews to 160 characters. `url` may be null. Phrase search exists only at engine level; quoted queries are not a supported REST phrase mode.
 
-On November 11, 2026, the supplied Render deployment responded successfully to `/actuator/health` and `/api/search/ranked?q=java`, but `/api/search/results?q=java%20concurrency` returned **404**. Responses lacked `Access-Control-Allow-Origin`. Local development now uses a same-origin, GET-only Vite proxy to reach that deployment. When the detailed route returns 404, the API adapter fetches real ranked IDs and their documents (up to 20, four concurrent reads), preserving backend rank order. No mock results are used. Static production hosting still requires the backend CORS configuration; the detailed route is preferred when available. The endpoint/service/DTO changes were already present in the user's working tree before frontend work began.
+Verified on November 11, 2026: the Render detailed-results endpoint returns HTTP 200 with real results and `Access-Control-Allow-Origin: https://kestrel-search-engine.vercel.app`. Local development uses a GET-only Vite proxy. For an older backend returning 404 for the detailed route, the adapter can fetch real ranked IDs and their documents (up to 20, four concurrent reads), preserving backend order. No mock results are used.
 
-`FrontendCorsConfig.java` is the only backend integration addition: exact origins, GET-only access to `/api/**` and `/actuator/health`, no credentials, no wildcards. Defaults allow `http://localhost:5173` and `http://127.0.0.1:5173`. If Vite chooses another port, use port 5173 or explicitly add that origin. For `npm run preview`, add port 4173 temporarily.
+`FrontendCorsConfig.java` is the only backend integration addition: exact origins, GET-only access to `/api/**` and `/actuator/health`, no credentials, no wildcards. Defaults allow `http://localhost:5173`, `http://127.0.0.1:5173`, and `https://kestrel-search-engine.vercel.app`. The environment setting below replaces these defaults when set. Origins must not have a trailing slash. If Vite chooses another port, use port 5173 or explicitly add that origin. For `npm run preview`, add port 4173 temporarily.
 
 For Render, configure:
 
 ```text
 KESTREL_WRITES_ENABLED=false
-KESTREL_FRONTEND_ORIGINS=http://localhost:5173,http://127.0.0.1:5173,https://YOUR-PROJECT.vercel.app
+KESTREL_FRONTEND_ORIGINS=http://localhost:5173,http://127.0.0.1:5173,https://kestrel-search-engine.vercel.app
 ```
 
-Replace the final origin with the exact Vercel production origin when it exists. Do not use wildcards for preview deployments. CORS does not enforce read-only access for nonbrowser clients: the existing server-side writes flag must be false on the public deployment. No Java algorithms, migrations, existing tests, Docker files, or workflows were changed.
+Update the final origin if the Vercel production domain changes. Do not use wildcards for preview deployments. CORS does not enforce read-only access for nonbrowser clients: the existing server-side writes flag must be false on the public deployment. No Java algorithms, migrations, existing tests, Docker files, or workflows were changed.
 
 ## Vercel deployment (when ready)
 
@@ -75,4 +83,4 @@ Benchmark results follow the live experience. The default search-quality view pa
 - `src/lib/api.js`: configuration, requests, response validation, safe links.
 - `src/styles.css`: visual system and responsive layouts.
 
-No frontend or backend deployment was performed.
+Deployment links and complete backend setup are documented in the [main README](../Readme.md).

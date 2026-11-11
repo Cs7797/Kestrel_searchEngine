@@ -2,6 +2,9 @@
 /datasets/
 /data/
 
+# Local scripts
+/scripts/
+
 # Environment variables
 .env
 .env.*
@@ -30,6 +33,5 @@ desktop.ini
 node_modules/
 dist/
 coverage/
-
 # Test reports
 surefire-reports/

@@ -36,6 +36,34 @@ class FrontendIntegrationTest {
     }
 
     @Test
+    void allowsDeployedVercelFrontend() throws Exception {
+        when(service.searchDetailed("java")).thenReturn(List.of());
+        mvc.perform(get("/api/search/results").param("q", "java")
+                .header("Origin", "https://kestrel-search-engine.vercel.app"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Access-Control-Allow-Origin", "https://kestrel-search-engine.vercel.app"));
+    }
+
+    @Test
+    void allowsReadPreflightFromVercel() throws Exception {
+        mvc.perform(options("/api/search/results")
+                .header("Origin", "https://kestrel-search-engine.vercel.app")
+                .header("Access-Control-Request-Method", "GET"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Access-Control-Allow-Origin", "https://kestrel-search-engine.vercel.app"))
+                .andExpect(header().string("Access-Control-Allow-Methods", "GET"))
+                .andExpect(header().doesNotExist("Access-Control-Allow-Credentials"));
+    }
+
+    @Test
+    void rejectsWritePreflightFromVercel() throws Exception {
+        mvc.perform(options("/api/documents")
+                .header("Origin", "https://kestrel-search-engine.vercel.app")
+                .header("Access-Control-Request-Method", "POST"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
     void rejectsUnconfiguredOrigins() throws Exception {
         mvc.perform(get("/api/search/results").param("q", "java")
                 .header("Origin", "https://unconfigured.example"))

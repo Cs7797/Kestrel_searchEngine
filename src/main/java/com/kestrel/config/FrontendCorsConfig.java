@@ -11,7 +11,7 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 public class FrontendCorsConfig implements WebMvcConfigurer {
     private final String[] origins;
 
-    public FrontendCorsConfig(@Value("${kestrel.frontend-origins:http://localhost:5173,http://127.0.0.1:5173}") String origins) {
+    public FrontendCorsConfig(@Value("${kestrel.frontend-origins:http://localhost:5173,http://127.0.0.1:5173,https://kestrel-search-engine.vercel.app}") String origins) {
         this.origins = Arrays.stream(origins.split(","))
                 .map(String::trim).filter(origin -> !origin.isEmpty()).toArray(String[]::new);
         if (Arrays.stream(this.origins).anyMatch(origin -> origin.contains("*"))) {
