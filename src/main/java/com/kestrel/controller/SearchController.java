@@ -14,6 +14,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import jakarta.validation.Valid;
 import java.util.List;
+import com.kestrel.dto.SearchResult;
 
 @RestController
 public class SearchController {
@@ -106,9 +107,15 @@ public String home() {
     public ResponseEntity<DocumentEntity> getDocumentById(
             @PathVariable String id) {
 
-        DocumentEntity document =
-                kestrelService.getDocumentById(id);
+        DocumentEntity document = kestrelService.getDocumentById(id);
 
         return ResponseEntity.ok(document);
     }
+    
+    @GetMapping("/api/search/results")
+public List<SearchResult> searchResults(
+        @RequestParam("q") String query) {
+
+    return kestrelService.searchDetailed(query);
+}
 }

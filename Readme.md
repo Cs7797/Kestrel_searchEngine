@@ -18,7 +18,20 @@ Rather than relying on existing search frameworks or libraries such as Apache Lu
 
 The backend is built with Java and Spring Boot, while PostgreSQL provides persistent document storage. The search index is reconstructed from persisted documents whenever the application starts.
 
-The next engineering priorities are thread-safe indexing and search, Docker containerization, and reproducible deployment. These features are planned, not yet implemented.
+The current implementation includes read/write locking, Docker containerization, and GitHub Actions checks. A React frontend lives in `client/`, separate from the Maven backend.
+
+## Frontend
+
+The Kestrel interface includes real API search, cold-start and retry states, an interactive architecture walkthrough, local benchmark charts, and source-verified documentation. Run it with Node.js 22.12+:
+
+```powershell
+cd client
+npm ci
+Copy-Item .env.example .env.local
+npm run dev
+```
+
+See [client/README.md](client/README.md) for configuration, validation commands, and exact Vercel deployment steps. Local development uses a GET-only Vite proxy and can hydrate real ranked IDs through document reads when the detailed-search endpoint is unavailable. Static production hosting still requires exact-origin backend CORS. No frontend deployment has been performed.
 
 ## Key Features
 
@@ -123,7 +136,7 @@ When Kestrel starts, the application loads persisted documents from PostgreSQL a
 | Database Migrations  | Flyway                                 |
 | Build Tool           | Apache Maven                           |
 | Testing              | JUnit 5, Spring Boot Test              |
-| Frontend             | React.js, Vite, Tailwind CSS — planned |
+| Frontend             | React, JavaScript, Vite, Tailwind CSS, Motion |
 
 ### Engineering Concepts
 
@@ -352,19 +365,14 @@ Kestrel is evolving from a custom search engine into a more reliable, concurrent
 - [x] Automatic index reconstruction on startup
 - [x] Local PostgreSQL integration tests (in the current development environment)
 
-### In Progress
+### Current infrastructure
 
-- [ ] Concurrent indexing and retrieval
-- [ ] Thread-safety improvements
-- [ ] Performance optimization
-
-### Planned
-
-- [ ] Docker-based containerization
-- [ ] CI/CD pipeline integration
-- [ ] Cloud deployment
-- [ ] Production-oriented monitoring
-- [ ] Advanced search capabilities and scalability improvements
+- [x] Concurrent index reads and exclusive writes through ReentrantReadWriteLock
+- [x] Docker and Docker Compose packaging
+- [x] GitHub Actions unit and PostgreSQL integration checks
+- [x] React frontend prepared for Vercel
+- [ ] Deploy current detailed-search API and exact-origin CORS configuration to Render
+- [ ] Host the frontend on Vercel when ready
 
 ---
 
@@ -396,7 +404,7 @@ Introduce concurrency, containerization, and deployment as the architecture evol
 
 ## Project Status
 
-Kestrel's core search engine, backend persistence layer, and multi-dataset retrieval evaluation are implemented. Concurrency, containerization, and deployment are future work.
+Kestrel's core engine, persistence, multi-dataset evaluation, concurrency controls, Docker configuration, CI checks, and frontend are implemented. The backend is hosted on Render; the current detailed-results endpoint and CORS configuration still need deployment. The frontend has not been hosted yet.
 
 **The goal is to build a search platform while maintaining control over its core indexing and retrieval algorithms.**
 

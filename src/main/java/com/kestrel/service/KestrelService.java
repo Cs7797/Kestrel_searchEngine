@@ -1,6 +1,11 @@
 
 package com.kestrel.service;
 
+
+import com.kestrel.dto.SearchResult;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import com.kestrel.Document;
 import com.kestrel.InvertedIndex;
 import com.kestrel.dto.DocumentRequest;
@@ -212,21 +217,75 @@ public class KestrelService {
     // RUN INDEX OPERATIONS AFTER DATABASE COMMIT
     private void afterCommit(Runnable action) {
 
-        if (TransactionSynchronizationManager.isSynchronizationActive()
-                && TransactionSynchronizationManager.isActualTransactionActive()) {
+            if (TransactionSynchronizationManager.isSynchronizationActive()
+                            && TransactionSynchronizationManager.isActualTransactionActive()) {
 
-            TransactionSynchronizationManager.registerSynchronization(
-                    new TransactionSynchronization() {
+                    TransactionSynchronizationManager.registerSynchronization(
+                                    new TransactionSynchronization() {
 
-                        @Override
-                        public void afterCommit() {
-                            action.run();
-                        }
-                    }
-            );
+                                            @Override
+                                            public void afterCommit() {
+                                                    action.run();
+                                            }
+                                    });
 
-        } else {
-            action.run();
-        }
+            } else {
+                    action.run();
+            }
     }
+    
+@Transactional(readOnly = true)
+public List<SearchResult> searchDetailed(String query) {
+
+    // Reuse the existing query validation and BM25 ranking.
+    List<String> rankedIds = search(query)
+            .stream()
+            .limit(20)
+            .toList();
+
+    if (rankedIds.isEmpty()) {
+        return List.of();
+    }
+
+    // Fetch matching document details in one database query.
+    Map<String, DocumentEntity> byId =
+            documentRepository.findAllById(rankedIds)
+                    .stream()
+                    .collect(Collectors.toMap(
+                            DocumentEntity::getId,
+                            Function.identity()
+                    ));
+
+    List<SearchResult> results = new java.util.ArrayList<>();
+
+    for (int i = 0; i < rankedIds.size(); i++) {
+
+        String id = rankedIds.get(i);
+        DocumentEntity document = byId.get(id);
+
+        if (document == null) {
+            continue;
+        }
+
+        String content = document.getContent();
+
+        String snippet = content == null ? "" :
+                content.replaceAll("\\s+", " ").trim();
+
+        if (snippet.length() > 160) {
+            snippet = snippet.substring(0, 160) + "...";
+        }
+
+        results.add(new SearchResult(
+                document.getId(),
+                document.getTitle(),
+                snippet,
+                document.getUrl(),
+                i + 1
+        ));
+    }
+
+    return results;
+}
+
 }

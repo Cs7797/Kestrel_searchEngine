@@ -1,0 +1,140 @@
+.launch-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: var(--page);
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  min-height: 100dvh;
+  color: var(--text);
+}
+.launch-grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(
+      color-mix(in srgb, var(--line) 45%, transparent) 1px,
+      transparent 1px
+    ),
+    linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--line) 45%, transparent) 1px,
+      transparent 1px
+    );
+  background-size: 64px 64px;
+  background-position: center;
+  mask-image: radial-gradient(ellipse at center, #000 20%, transparent 78%);
+}
+.launch-center {
+  position: relative;
+  text-align: center;
+  padding: 28px;
+  max-width: 100%;
+}
+.launch-emblem {
+  width: 160px;
+  height: 160px;
+  position: relative;
+  display: grid;
+  place-items: center;
+  margin: 0 auto 28px;
+}
+.launch-ring {
+  position: absolute;
+  inset: 0;
+  width: 160px;
+  height: 160px;
+  transform: rotate(-90deg);
+}
+.launch-logo {
+  width: 80px;
+  height: 80px;
+  filter: drop-shadow(0 8px 24px #0001);
+}
+.launch-wordmark {
+  font-size: 48px;
+  letter-spacing: -2px;
+  font-weight: 650;
+  line-height: 1.1;
+}
+.launch-wordmark span {
+  color: var(--violet);
+}
+.launch-center p {
+  font-size: 17px;
+  color: var(--muted);
+  margin-top: 15px;
+}
+.launch-progress {
+  width: 160px;
+  height: 2px;
+  overflow: hidden;
+  background: var(--line);
+  margin: 32px auto 0;
+}
+.launch-progress > div {
+  height: 100%;
+  background: var(--violet);
+  transform-origin: left;
+}
+.launch-caption {
+  position: absolute;
+  bottom: max(40px, env(safe-area-inset-bottom));
+  left: 20px;
+  right: 20px;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--muted);
+  letter-spacing: 0.08em;
+  line-height: 1.8;
+}
+.launch-caption span {
+  color: var(--violet);
+  margin: 0 12px;
+}
+.launch-cross {
+  position: absolute;
+  width: 13px;
+  height: 13px;
+}
+.launch-cross::before,
+.launch-cross::after {
+  content: "";
+  position: absolute;
+  background: var(--line);
+}
+.launch-cross::before {
+  width: 13px;
+  height: 1px;
+  top: 6px;
+}
+.launch-cross::after {
+  width: 1px;
+  height: 13px;
+  left: 6px;
+}
+.launch-cross-one {
+  top: 15%;
+  left: 15%;
+}
+.launch-cross-two {
+  bottom: 15%;
+  right: 15%;
+}
+@media (max-width: 480px) {
+  .launch-wordmark {
+    font-size: 42px;
+  }
+  .launch-center p {
+    font-size: 15px;
+  }
+  .launch-caption {
+    font-size: 10px;
+    letter-spacing: 0.03em;
+  }
+  .launch-caption span {
+    margin: 0 5px;
+  }
+}
